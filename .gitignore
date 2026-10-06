@@ -1,0 +1,89 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+.Python
+
+# === Virtual Environments ===
+venv/
+env/
+.venv/
+ENV/
+.env/
+
+# === Distribution / Packaging ===
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+
+# === Pytest & Testing ===
+.pytest_cache/
+.cache/
+*.log
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+nosetests.xml
+
+# === Type Checking ===
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+
+# === Jupyter Notebooks ===
+.ipynb_checkpoints/
+*.ipynb
+
+# === AI / ML Models ===
+# Large model weight files — download separately
+ai_assistive_vision/models/*.pt
+ai_assistive_vision/models/*.pth
+ai_assistive_vision/models/*.onnx
+ai_assistive_vision/models/*.bin
+ai_assistive_vision/models/*.tflite
+
+# MiDaS / torch.hub cache
+*.hub/
+hub/
+
+# === IDE & Editor Files ===
+.vscode/
+.idea/
+*.suo
+*.user
+*.sln.docstates
+*.code-workspace
+.DS_Store
+Thumbs.db
+
+# === Logs & Outputs ===
+logs/
+*.log
+output/
+runs/          # Ultralytics training runs folder
+exp/
+
+# === Temporary / OS Files ===
+*.tmp
+*.bak
+*.swp
+*~
+.Trash-*
+
+# === Windows ===
+desktop.ini
+ehthumbs.db
+$RECYCLE.BIN/
+
+# === Secrets / Credentials ===
+.env
+*.env
+secrets.json
+config_local.py

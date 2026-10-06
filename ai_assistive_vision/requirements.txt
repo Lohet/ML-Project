@@ -1,0 +1,9 @@
+opencv-python
+numpy
+pytest
+ultralytics
+timm
+pyttsx3
+
+# For RTX GPU acceleration on Windows, install PyTorch from the official CUDA wheel index:
+# C:\Users\Lohet.S.Ratnakar\anaconda3\python.exe -m pip install --upgrade torch==2.11.0+cu128 torchvision==0.26.0+cu128 --index-url https://download.pytorch.org/whl/cu128
