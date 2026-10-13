@@ -30,15 +30,24 @@ class EventManager:
     def _determine_category(self, event: Dict[str, Any]) -> str:
         """Determine the category of an event for prioritization."""
         
-        # Phase 5 obstacle logic added priority: 'high' or 'medium'
-        if event.get("priority") == "high":
+        # Immediate obstacle or high-priority temporal event
+        if event.get("priority") == "high" or event.get("event") == "approaching":
             return "immediate_obstacle"
+
+        if event.get("event") == "text":
+            return "text"
+
+        # Phase 11: door detection events
+        if event.get("event") == "door":
+            return "door"
 
         obj = event.get("object", "")
         if obj in self.VEHICLE_LABELS:
             return "vehicle"
         if obj == "person":
             return "person"
+        if obj == "door":
+            return "door"
         if obj in self.IMPORTANT_OBJECT_LABELS:
             return "important_object"
             
@@ -46,12 +55,19 @@ class EventManager:
 
     def _get_signature(self, event: Dict[str, Any]) -> str:
         """Create a unique signature for an event to handle deduplication."""
-        # Simple deduplication based on object label, direction, and distance
-        # e.g. "person_center_close"
+        event_type = event.get("event", "obstacle")
+        if event_type == "text":
+            text_val = event.get("text", event.get("object", "unknown"))
+            direction = event.get("direction", "unknown")
+            return f"text_{text_val}_{direction}"
+
+        track_id = event.get("track_id", "untracked")
         obj = event.get("object", "unknown")
         direction = event.get("direction", "unknown")
         distance = event.get("distance", "unknown")
-        return f"{obj}_{direction}_{distance}"
+        return f"{event_type}_{track_id}_{obj}_{direction}_{distance}"
+
+
 
     def filter_and_prioritize(self, events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Filter out duplicate events and sort by priority."""

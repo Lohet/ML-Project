@@ -57,15 +57,32 @@ class AudioEngine:
 
     def generate_event_text(self, event: dict) -> str:
         """Convert a deduplicated event dictionary into a short phrase."""
+        event_name = str(event.get("event", "obstacle"))
         label = str(event.get("object", "obstacle")).capitalize()
         direction = str(event.get("direction", "ahead"))
-        
+
         if direction == "center":
             direction_phrase = "ahead"
         else:
             direction_phrase = f"on the {direction}"
-            
+
+        if event_name == "text":
+            text_val = str(event.get("text", "text")).title()
+            return f"{text_val} {direction_phrase}."
+        if event_name == "approaching":
+            return f"{label} approaching {direction_phrase}."
+        if event_name == "receding":
+            return f"{label} moving away {direction_phrase}."
+        if event_name == "disappearing":
+            return f"{label} cleared."
+        if event_name == "direction_change":
+            return f"{label} moving {direction_phrase}."
+        if event_name == "door":
+            return f"Door {direction_phrase}."
+
         return f"{label} {direction_phrase}."
+
+
 
     def _worker(self) -> None:
         """Background worker that initializes pyttsx3 and consumes the queue."""

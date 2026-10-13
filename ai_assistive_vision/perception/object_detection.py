@@ -19,9 +19,11 @@ class Detection:
     confidence: float
     bbox: list[int]
     center: list[int]
+    track_id: int | None = None
 
     def as_dict(self) -> dict[str, object]:
         return {
+            "track_id": self.track_id,
             "label": self.label,
             "confidence": self.confidence,
             "bbox": self.bbox,
@@ -56,6 +58,28 @@ class ObjectDetector:
         if not results:
             return []
         return [detection.as_dict() for detection in parse_yolo_result(results[0])]
+
+    def track(
+        self,
+        frame,
+        tracker: str = "bytetrack.yaml",
+        persist: bool = True,
+    ) -> list[dict[str, object]]:
+        results = self._model.track(
+            frame,
+            conf=self.confidence,
+            device=self.device,
+            persist=persist,
+            tracker=tracker,
+            verbose=False,
+        )
+        if not results:
+            return []
+        return [detection.as_dict() for detection in parse_yolo_result(results[0])]
+
+    def reset_tracker(self) -> None:
+        if hasattr(self._model, "predictor") and getattr(self._model.predictor, "trackers", None):
+            self._model.predictor.trackers = []
 
     def _load_model(self) -> Any:
         try:
@@ -103,8 +127,16 @@ def parse_yolo_result(result) -> list[Detection]:
         center_x = int(round((x1 + x2) / 2))
         center_y = int(round((y1 + y2) / 2))
 
+        track_id: int | None = None
+        if hasattr(box, "id") and box.id is not None:
+            try:
+                track_id = int(_tensor_to_scalar(box.id))
+            except (TypeError, ValueError, IndexError):
+                track_id = None
+
         detections.append(
             Detection(
+                track_id=track_id,
                 label=label,
                 confidence=confidence,
                 bbox=[x1, y1, x2, y2],
@@ -113,6 +145,7 @@ def parse_yolo_result(result) -> list[Detection]:
         )
 
     return detections
+
 
 
 def _tensor_to_list(value) -> list[float]:

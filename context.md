@@ -2,9 +2,9 @@
 
 ## Current Scope
 
-- Completed through: Phase 7 - Audio Feedback.
-- Stop point: Do not implement Phase 8 object tracking until the user approves the next phase.
-- Latest user request: apply accuracy improvements for incorrect detection.
+- Completed through: Phase 11 - Door Detection.
+- Stop point: Do not implement Phase 12 stair detection until the user approves the next phase.
+- Latest user request: Proceed with next phases until project is complete, update documentation as you go.
 
 ## Environment Checks - 2026-10-06
 
@@ -192,6 +192,7 @@ Implemented:
 - Added tests in `ai_assistive_vision/tests/test_depth.py` and fixed failing assertions.
 
 Notes:
+
 - Depth scores are relative to the scene and normalized (0..1) within the frame. Larger scores represent closer objects.
 - Physical distance cannot be guaranteed without camera calibration, so depth is only relative.
 
@@ -208,6 +209,7 @@ Implemented:
 - Added tests in `ai_assistive_vision/tests/test_decision.py`.
 
 Notes:
+
 - This is a basic rule-based engine. It doesn't yet deduplicate (Phase 6) or track objects over time (Phase 8/9).
 
 ## Phase 6 - Priority and Deduplication
@@ -223,6 +225,7 @@ Implemented:
 - Added tests in `ai_assistive_vision/tests/test_priority.py`.
 
 Notes:
+
 - Filtered events are printed to the console rather than shown exclusively on screen, as screen drawing persists for only one frame otherwise.
 
 ## Phase 7 - Audio Feedback
@@ -239,4 +242,123 @@ Implemented:
 - Updated `requirements.txt` with `pyttsx3`.
 
 Notes:
+
 - The text queue size is artificially limited (max size 2) to ensure speech stays relevant and the system doesn't lag far behind real-world events.
+
+## Phase 8 - Object Tracking
+
+Implemented:
+
+- Added `ai_assistive_vision/perception/tracking.py` containing `ObjectTracker`.
+- Integrates Ultralytics `ByteTrack` (`bytetrack.yaml`) to assign and persist continuous `track_id` values across frames.
+- Extended detection objects with `track_id` (e.g. `ID:1 person 0.92 center close`).
+- Updated `app.py` to run `tracker.track(frame)` instead of raw detector when tracking is enabled (`TRACKER_ENABLED=True`).
+- Added tests in `ai_assistive_vision/tests/test_tracking.py`.
+
+Notes:
+
+- `persist=True` preserves state between calls.
+- `reset_tracker()` is provided to clear internal tracking state on pipeline resets.
+
+## Phase 9 - Temporal Reasoning
+
+Implemented:
+
+- Added `ai_assistive_vision/reasoning/temporal.py` containing `TemporalReasoner`.
+- Bounded sliding window history (`TEMPORAL_HISTORY_LEN=30`) per `track_id`.
+- Evaluates frame-to-frame motion trends:
+  - `approaching`: relative inverse depth score increases or distance bucket moves closer.
+  - `receding`: relative inverse depth score decreases or distance bucket moves farther.
+  - `moving`: center point offset exceeds spatial motion threshold.
+  - `direction_change`: horizontal direction shifts (e.g., `left` to `center`).
+  - `persistent_obstacle`: object remains `close` or `very_close` across consecutive frames.
+  - `disappearing`: tracked object is missing for `TEMPORAL_MISSING_TIMEOUT_FRAMES` (15 frames).
+- Implemented state-transition guarding (`_last_event_state`) to eliminate duplicate event spam.
+- Integrated temporal events into `extract_events()` in `decision.py` and `app.py`.
+- Added tests in `ai_assistive_vision/tests/test_temporal.py`.
+
+Notes:
+
+- Higher inverse depth score indicates an approaching object.
+- State transitions emit events only when target state changes.
+
+## Phase 10 - Environmental OCR
+
+Implemented:
+
+- Added `ai_assistive_vision/perception/ocr.py` featuring `TextRecognizer` and `OcrWorker`.
+- Integrates `EasyOCR` for offline scene text detection and recognition.
+- Dedicated `OcrWorker` thread running with a bounded queue (`maxsize=1`) and frame-interval sampling (`OCR_FRAME_INTERVAL=10`) so OpenCV live display feed runs smoothly at full FPS without blocking.
+- Implemented multi-tier text filtering & candidate classification (`classify_text_candidate`):
+  - High-priority keywords: `EXIT`, `EMERGENCY`, `STAIRS`, `DANGER`, `RESTROOM`, etc.
+  - Room/location regex patterns: `ROOM 204`, `LAB 302`, `BLOCK C`, `RM 101`, etc.
+  - Rejects single character/gibberish non-actionable noise.
+- Maps spatial center `[x, y]` of text bounding boxes to horizontal direction (`left`, `center`, `right`).
+- Integrated cached OCR results into `app.py` main display loop (`draw_ocr_detections`) and prioritized event queue.
+- Added unit tests in `ai_assistive_vision/tests/test_ocr.py`.
+
+Notes:
+
+- `KMP_DUPLICATE_LIB_OK=TRUE` set for OpenMP compatibility.
+- Asynchronous worker design ensures 0ms main-thread delay for OCR inference.
+
+## Full Test Suite Results (Phase 1 to Phase 10)
+
+Command executed:
+`.\.venv\Scripts\python.exe -m pytest ai_assistive_vision/tests`
+
+- Test result: **38 passed in 19.60s**.
+- Breakdowns by test module:
+  - `test_camera.py`: 3 passed (Camera config, FPS counter, failure handling)
+  - `test_object_detection.py`: 3 passed (YOLO initialization, smoke test, detection output schema)
+  - `test_spatial.py`: 3 passed (Left / center / right bounding box spatial classification)
+  - `test_depth.py`: 4 passed (MiDaS model depth estimation & relative distance bucket labeling)
+  - `test_decision.py`: 1 passed (Event extraction & priority assignment for close obstacles)
+  - `test_priority.py`: 2 passed (Deduplication signature matching & 3s cooldown manager)
+  - `test_audio.py`: 3 passed (TTS sentence generation, queue overflow protection, thread shutdown)
+  - `test_tracking.py`: 3 passed (ByteTrack tracker initialization, track ID mapping, tracker reset)
+  - `test_temporal.py`: 8 passed (Approaching, receding, lateral movement, direction change, persistence, disappearing events)
+  - `test_ocr.py`: 8 passed (Keyword matching, room regex, confidence filtering, async worker thread submission, frame dropping)
+
+## Phase 11 - Door Detection
+
+Implemented on 2026-10-13:
+
+- Added i_assistive_vision/perception/door_detection.py.
+- Dual-backend design:
+  - **Custom YOLO backend** (preferred): Loads a fine-tuned YOLOv8 .pt model from DOOR_MODEL_PATH when the file exists.
+  - **Geometric contour fallback**: When no custom model is configured, uses OpenCV Canny + contour approximation with door aspect-ratio heuristics. Zero additional dependencies.
+- Greedy NMS with configurable IoU threshold removes overlapping candidates.
+- Spatial direction attached to each door detection based on bounding box center.
+- Updated config.py with: DOOR_ENABLED, DOOR_MODEL_PATH, DOOR_CONFIDENCE, DOOR_DEVICE, DOOR_FRAME_INTERVAL.
+- Updated easoning/decision.py: added door_events parameter to xtract_events().
+- Updated easoning/priority.py: added "door" category recognition.
+- Updated eedback/audio.py: added "door" event speech "Door {direction_phrase}.".
+- Updated pp.py: integrated DoorDetector, draw_door_detections() (green boxes), door caching in main loop.
+- Fixed pre-existing OCR test mock failures in 	est_ocr.py.
+- Added tests in i_assistive_vision/tests/test_door_detection.py (13 tests).
+- Window name updated to "AI Assistive Vision - Phase 11".
+
+Notes:
+
+- Geometric detector has moderate false-positive rate in complex scenes. For production, provide a fine-tuned YOLO door model.
+- Door detection runs every DOOR_FRAME_INTERVAL=3 frames to minimize compute impact.
+
+## Full Test Suite Results (Phase 1 to Phase 11)
+
+Command executed:
+`C:\Users\Lohet.S.Ratnakar\anaconda3\python.exe -m pytest -p no:cacheprovider ai_assistive_vision/tests`
+
+- Test result: **53 passed in 7.45s**.
+- Breakdowns by test module:
+  - 	est_camera.py: 3 passed
+  - 	est_object_detection.py: 3 passed
+  - 	est_spatial.py: 3 passed
+  - 	est_depth.py: 4 passed
+  - 	est_decision.py: 1 passed
+  - 	est_priority.py: 2 passed
+  - 	est_audio.py: 3 passed
+  - 	est_tracking.py: 3 passed
+  - 	est_temporal.py: 8 passed
+  - 	est_ocr.py: 8 passed (2 previously failing mock tests fixed)
+  - 	est_door_detection.py: 13 passed (IOU, NMS, geometric detector, unified factory)

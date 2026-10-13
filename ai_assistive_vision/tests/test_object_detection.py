@@ -41,11 +41,13 @@ def test_parse_yolo_result_returns_project_detection_format():
 
     assert len(detections) == 1
     assert detections[0].as_dict() == {
+        "track_id": None,
         "label": "person",
         "confidence": pytest.approx(0.923),
         "bbox": [10, 21, 111, 220],
         "center": [60, 120],
     }
+
 
 
 def test_object_detector_detect_uses_normalized_format(monkeypatch):
