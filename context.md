@@ -2,9 +2,10 @@
 
 ## Current Scope
 
-- Completed through: Phase 11 - Door Detection.
-- Stop point: Do not implement Phase 12 stair detection until the user approves the next phase.
-- Latest user request: Proceed with next phases until project is complete, update documentation as you go.
+- Completed through: Phase 18 - Full System Testing & Verification (All phases from Phase 1 through Phase 18 completed).
+- Status: Project plan fully implemented, integrated, verified, and documented.
+- Total Test Suite: 105 automated unit and integration tests passing.
+
 
 ## Environment Checks - 2026-10-06
 
@@ -346,19 +347,136 @@ Notes:
 
 ## Full Test Suite Results (Phase 1 to Phase 11)
 
-Command executed:
-`C:\Users\Lohet.S.Ratnakar\anaconda3\python.exe -m pytest -p no:cacheprovider ai_assistive_vision/tests`
-
 - Test result: **53 passed in 7.45s**.
-- Breakdowns by test module:
-  - 	est_camera.py: 3 passed
-  - 	est_object_detection.py: 3 passed
-  - 	est_spatial.py: 3 passed
-  - 	est_depth.py: 4 passed
-  - 	est_decision.py: 1 passed
-  - 	est_priority.py: 2 passed
-  - 	est_audio.py: 3 passed
-  - 	est_tracking.py: 3 passed
-  - 	est_temporal.py: 8 passed
-  - 	est_ocr.py: 8 passed (2 previously failing mock tests fixed)
-  - 	est_door_detection.py: 13 passed (IOU, NMS, geometric detector, unified factory)
+
+## Phase 12 - Stair Detection
+
+Implemented on 2026-10-13:
+
+- Added `ai_assistive_vision/perception/stair_detection.py`.
+- Dual-backend design:
+  - **Custom YOLO stair backend**: Loads a fine-tuned YOLOv8 `.pt` model from `STAIR_MODEL_PATH` when configured.
+  - **Geometric horizontal Hough line detector**: Fallback heuristic that clusters parallel horizontal edges into stair steps using Canny + HoughLinesP with midpoint-Y clustering.
+- Safety & Uncertainty Management:
+  - Inherent ambiguity of stair detection is handled by setting `uncertain: True` for geometric detections or detections below `STAIR_UNCERTAIN_THRESHOLD` (0.55).
+  - Audio announcement converts uncertain stair detections into *"Possible stairs ahead."* / *"Possible stairs on the {direction}."* instead of overconfident assertions.
+- Updated `config.py`: added `STAIR_ENABLED`, `STAIR_MODEL_PATH`, `STAIR_CONFIDENCE`, `STAIR_UNCERTAIN_THRESHOLD`, `STAIR_DEVICE`, `STAIR_FRAME_INTERVAL`, and window title `AI Assistive Vision - Phase 12`.
+- Updated `reasoning/decision.py`: added `stair_events` parameter to `extract_events()`.
+- Updated `reasoning/priority.py`: added `stairs` category (priority score 70) and signature deduplication.
+- Updated `feedback/audio.py`: added speech generator for `stairs` with `uncertain` phrasing.
+- Updated `app.py`: integrated `StairDetector`, `draw_stair_detections()` with orange bounding boxes, and periodic frame evaluation.
+- Added tests in `ai_assistive_vision/tests/test_stair_detection.py` (9 tests covering schema, line clustering, blank frame, factory fallback, and uncertainty flag).
+
+## Full Test Suite Results (Phase 1 to Phase 12)
+
+- Test result: **62 passed in 11.68s**.
+
+## Phase 13 - Vehicle Awareness
+
+Implemented on 2026-10-13:
+
+- Added `ai_assistive_vision/reasoning/vehicle_awareness.py`.
+- Targets COCO vehicle classes: `car`, `bus`, `truck`, `motorcycle`, `bicycle`.
+- Combines object detection, tracking, spatial direction, relative depth progression, and trajectory movement vectors.
+- Detects critical vehicle scenarios:
+  - Approaching vehicles via positive depth delta or bounding box expansion.
+  - Lateral crossing vehicles moving across the user's field of view (e.g., crossing from left to right).
+  - High-speed approach detection with `is_fast=True` ("Fast vehicle approaching from the left.").
+  - Proximity warning for very close vehicles.
+- Updated `config.py`: added `VEHICLE_AWARENESS_ENABLED`, `VEHICLE_APPROACH_DEPTH_DELTA`, `VEHICLE_APPROACH_AREA_RATIO`, `VEHICLE_CROSSING_PX_THRESHOLD`, `VEHICLE_FAST_SPEED_THRESHOLD`.
+- Updated `reasoning/decision.py`: added `vehicle_events` parameter to `extract_events()`.
+- Updated `reasoning/priority.py`: prioritized vehicle safety events with dedicated signature deduplication.
+- Updated `feedback/audio.py`: natural speech phrases e.g. *"Vehicle approaching from the left."*, *"Vehicle crossing from left to right."*.
+- Updated `app.py`: integrated `VehicleAwarenessEngine` into video loop.
+- Added tests in `ai_assistive_vision/tests/test_vehicle_awareness.py` (8 tests).
+
+## Phase 14 - Scene Understanding
+
+Implemented on 2026-10-13:
+
+- Added `ai_assistive_vision/reasoning/scene_understanding.py`.
+- Environmental classifier: heuristic voting across COCO indoor vs outdoor indicator sets.
+- Executive scene briefing:
+  - Formulates concise, natural scene overviews answering *"What does the user need to know right now?"*.
+  - Groups objects and landmarks spatially (ahead, on the left, on the right).
+  - Example output: *"Indoor environment. Person ahead. Door on the right. Chair on the left."* or *"Outdoor environment. Car approaching on the left. Person on the right."*.
+- Added tests in `ai_assistive_vision/tests/test_scene_understanding.py` (4 tests).
+
+## Phase 15 - Haptic Feedback
+
+Implemented on 2026-10-13:
+
+- Added `ai_assistive_vision/feedback/haptic.py`.
+- 3-motor directional vibration interface mapping:
+  - Spatial channels: `LEFT`, `CENTER`, `RIGHT`.
+  - Proximity to intensity: `far` → `weak`, `medium` → `moderate`, `close` → `strong`, `very_close` → `rapid`.
+- Backends:
+  - `MockHapticBackend`: thread-safe in-memory simulator for automated testing and headless operation.
+  - `SerialHapticBackend`: ASCII protocol communication (`L:3:150\n`) over USB serial with ESP32/Arduino microcontrollers.
+- Added tests in `ai_assistive_vision/tests/test_haptic.py` (4 tests).
+
+## Phase 16 - Audio + Haptic Fusion
+
+Implemented on 2026-10-13:
+
+- Added `ai_assistive_vision/feedback/fusion.py` (`MultimodalFusionEngine`).
+- Orchestrates multi-sensory feedback:
+  - High-severity / Safety-Critical events (approaching vehicles, immediate obstacles, stairs) trigger simultaneous audio speech + directional haptic vibration.
+  - Low-severity / Informational events (OCR text, scene summaries, far objects) receive audio only to prevent sensory fatigue.
+  - Directional haptic throttling: enforces cooldowns between vibration pulses on the same channel to prevent continuous buzzing numbness.
+- Added tests in `ai_assistive_vision/tests/test_fusion.py` (3 tests).
+
+## Phase 17 - Real-Time Optimization & Profiling
+
+Implemented on 2026-10-13:
+
+- Added `ai_assistive_vision/optimization/profiler.py` (`PerformanceProfiler`).
+- Latency profiling across all pipeline stages: capture, object detection, tracking, depth estimation, reasoning, and speech dispatch.
+- Rolling window statistical throughput (FPS) and end-to-end latency tracking.
+- System resource monitoring: host RSS memory (MB), CPU usage (%), and GPU VRAM allocation (MB).
+- OpenMP compatibility guard to eliminate duplicate runtime conflicts.
+- Added tests in `ai_assistive_vision/tests/test_profiler.py` (3 tests).
+
+## Phase 18 - Comprehensive System Evaluation & Verification
+
+Implemented on 2026-10-13:
+
+- Added `ai_assistive_vision/tests/test_phase18_system_evaluation.py`.
+- Validates the entire specification matrix from `plan.md`:
+  1. Object detection targets (person, car, chair, bottle, bag, bicycle).
+  2. Spatial localization coverage (left, center, right).
+  3. Distance progression buckets (far, medium, close, very_close).
+  4. OCR landmark & text categories (Exit, room numbers, warning signs, labels).
+  5. Dynamic object motions (moving person, moving car, approaching, receding).
+  6. Environment contexts (indoor, outdoor, staircase, corridor).
+  7. End-to-end multimodal pipeline integration (Audio + Haptic Fusion).
+- Added 21 dedicated evaluation tests.
+
+## Master Full Test Suite Results (Phase 1 to Phase 18)
+
+Command executed:
+`python -m pytest -p no:cacheprovider ai_assistive_vision/tests`
+
+- Test result: **105 passed in 15.46s** (100% GREEN).
+- Breakdown by test module:
+  - `test_camera.py`: 3 passed
+  - `test_object_detection.py`: 3 passed
+  - `test_spatial.py`: 3 passed
+  - `test_depth.py`: 4 passed
+  - `test_decision.py`: 1 passed
+  - `test_priority.py`: 2 passed
+  - `test_audio.py`: 3 passed
+  - `test_tracking.py`: 3 passed
+  - `test_temporal.py`: 8 passed
+  - `test_ocr.py`: 8 passed
+  - `test_door_detection.py`: 13 passed
+  - `test_stair_detection.py`: 9 passed
+  - `test_vehicle_awareness.py`: 8 passed
+  - `test_scene_understanding.py`: 4 passed
+  - `test_haptic.py`: 4 passed
+  - `test_fusion.py`: 3 passed
+  - `test_profiler.py`: 3 passed
+  - `test_phase18_system_evaluation.py`: 21 passed
+- Total: **105 passed**.
+
+

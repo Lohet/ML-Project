@@ -3,7 +3,7 @@
 CAMERA_INDEX = 0
 FRAME_WIDTH = 1280
 FRAME_HEIGHT = 720
-WINDOW_NAME = "AI Assistive Vision - Phase 12"
+WINDOW_NAME = "AI Assistive Vision - Phase 13"
 FPS_SMOOTHING = 0.9
 
 YOLO_MODEL = "ai_assistive_vision/models/yolov8s.pt"
@@ -47,3 +47,10 @@ STAIR_CONFIDENCE = 0.35  # Lower threshold; stairs below 0.55 → "Possible stai
 STAIR_UNCERTAIN_THRESHOLD = 0.55   # Below this → "Possible stairs ahead."
 STAIR_DEVICE = "auto"
 STAIR_FRAME_INTERVAL = 5  # Run stair detection every N frames
+
+# Phase 13 — Vehicle Awareness
+VEHICLE_AWARENESS_ENABLED = True
+VEHICLE_APPROACH_DEPTH_DELTA = 0.05
+VEHICLE_APPROACH_AREA_RATIO = 1.15
+VEHICLE_CROSSING_PX_THRESHOLD = 50
+VEHICLE_FAST_SPEED_THRESHOLD = 0.12

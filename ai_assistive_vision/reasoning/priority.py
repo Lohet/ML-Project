@@ -41,11 +41,21 @@ class EventManager:
         if event.get("event") == "door":
             return "door"
 
+        # Phase 12: stair detection events
+        if event.get("event") == "stairs":
+            return "stairs"
+
+        # Phase 13: vehicle awareness events
+        if str(event.get("event", "")).startswith("vehicle_"):
+            return "vehicle"
+
         obj = event.get("object", "")
-        if obj in self.VEHICLE_LABELS:
+        if obj in self.VEHICLE_LABELS or obj == "vehicle":
             return "vehicle"
         if obj == "person":
             return "person"
+        if obj == "stairs":
+            return "stairs"
         if obj == "door":
             return "door"
         if obj in self.IMPORTANT_OBJECT_LABELS:
@@ -60,6 +70,17 @@ class EventManager:
             text_val = event.get("text", event.get("object", "unknown"))
             direction = event.get("direction", "unknown")
             return f"text_{text_val}_{direction}"
+
+        if event_type == "stairs":
+            direction = event.get("direction", "unknown")
+            uncertain = event.get("uncertain", False)
+            return f"stairs_{direction}_{uncertain}"
+
+        if str(event_type).startswith("vehicle_"):
+            v_type = event.get("vehicle_type", "vehicle")
+            direction = event.get("direction", "unknown")
+            distance = event.get("distance", "unknown")
+            return f"{event_type}_{v_type}_{direction}_{distance}"
 
         track_id = event.get("track_id", "untracked")
         obj = event.get("object", "unknown")

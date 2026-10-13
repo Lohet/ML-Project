@@ -1,4 +1,4 @@
-"""Phase 11 application: Door detection integration."""
+"""Phase 13 application: Vehicle Awareness integration."""
 
 from __future__ import annotations
 
@@ -24,9 +24,20 @@ from ai_assistive_vision.config import (
     OCR_ENABLED,
     OCR_FRAME_INTERVAL,
     OCR_LANGUAGES,
+    STAIR_CONFIDENCE,
+    STAIR_DEVICE,
+    STAIR_ENABLED,
+    STAIR_FRAME_INTERVAL,
+    STAIR_MODEL_PATH,
+    STAIR_UNCERTAIN_THRESHOLD,
     TRACKER_ENABLED,
     TRACKER_PERSIST,
     TRACKER_TYPE,
+    VEHICLE_APPROACH_AREA_RATIO,
+    VEHICLE_APPROACH_DEPTH_DELTA,
+    VEHICLE_AWARENESS_ENABLED,
+    VEHICLE_CROSSING_PX_THRESHOLD,
+    VEHICLE_FAST_SPEED_THRESHOLD,
     YOLO_CONFIDENCE,
     YOLO_DEVICE,
     YOLO_MODEL,
@@ -36,9 +47,11 @@ from ai_assistive_vision.perception.depth import DepthEstimator, add_relative_de
 from ai_assistive_vision.perception.door_detection import DoorDetector
 from ai_assistive_vision.perception.object_detection import ObjectDetector
 from ai_assistive_vision.perception.ocr import OcrWorker
+from ai_assistive_vision.perception.stair_detection import StairDetector
 from ai_assistive_vision.perception.tracking import ObjectTracker
 from ai_assistive_vision.reasoning.spatial import add_spatial_directions
 from ai_assistive_vision.reasoning.temporal import TemporalReasoner
+from ai_assistive_vision.reasoning.vehicle_awareness import VehicleAwarenessEngine
 from ai_assistive_vision.reasoning.decision import extract_events
 from ai_assistive_vision.reasoning.priority import EventManager
 from ai_assistive_vision.feedback.audio import AudioEngine
@@ -58,59 +71,61 @@ def draw_fps(frame, fps: float) -> None:
 
 
 def draw_events(frame, events: list[dict[str, object]]) -> None:
-    y_offset = 80
-    for i, event in enumerate(events):
-        dist_str = f" ({event['distance']})" if 'distance' in event else ""
-        text = f"EVENT: {event['priority'].upper()} priority {event['event']} - {event.get('text', event.get('object'))} {event['direction']}{dist_str}"
-        color = (0, 0, 255) if event['priority'] == 'high' else (0, 165, 255)
+    """Draw system events on the bottom left corner."""
+    y_offset = frame.shape[0] - 20
+    for event in events[-5:]:
+        event_str = f"EVENT: {event['event']} - {event.get('object', '')} ({event.get('distance', '')}) [{event.get('direction', '')}]"
         cv2.putText(
             frame,
-            text,
-            (20, y_offset + i * 30),
+            event_str,
+            (20, y_offset),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
-            color,
+            0.6,
+            (0, 0, 255),
             2,
             cv2.LINE_AA,
         )
+        y_offset -= 25
 
 
 def draw_detections(frame, detections: list[dict[str, object]]) -> None:
     for detection in detections:
-        x1, y1, x2, y2 = detection["bbox"]
+        bbox = detection["bbox"]
         label = detection["label"]
         confidence = detection["confidence"]
+        direction = detection.get("direction", "")
+        distance = detection.get("distance", "")
         track_id = detection.get("track_id")
-        direction = detection.get("direction", "unknown")
-        distance = detection.get("distance", "unknown")
 
-        id_str = f"ID:{track_id} " if track_id is not None else ""
-        text = f"{id_str}{label} {confidence:.2f} {direction} {distance}"
+        if track_id is not None:
+            text = f"ID:{track_id} {label} {confidence:.2f} {distance} {direction}".strip()
+        else:
+            text = f"{label} {confidence:.2f} {distance} {direction}".strip()
 
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 220, 255), 2)
+        x1, y1, x2, y2 = bbox
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
         cv2.putText(
             frame,
             text,
             (x1, max(y1 - 10, 20)),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.6,
-            (0, 220, 255),
+            0.5,
+            (255, 0, 0),
             2,
             cv2.LINE_AA,
         )
 
 
-def draw_ocr_detections(frame, text_events: list[dict[str, object]]) -> None:
-    for text_event in text_events:
-        bbox = text_event.get("bbox")
+def draw_ocr_detections(frame, text_events: list[dict]) -> None:
+    """Draw detected text bounding boxes and extracted text on frame."""
+    for event in text_events:
+        bbox = event.get("bbox")
         if not bbox:
             continue
         x1, y1, x2, y2 = bbox
-        txt = text_event.get("text", "")
-        conf = text_event.get("confidence", 0.0)
-        direction = text_event.get("direction", "")
-
-        label_text = f"TEXT: {txt} ({conf:.2f}) {direction}"
+        text = event.get("text", "")
+        direction = event.get("direction", "")
+        label_text = f"TXT: {text} [{direction}]"
         cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 255), 2)
         cv2.putText(
             frame,
@@ -148,6 +163,32 @@ def draw_door_detections(frame, door_detections: list[dict]) -> None:
         )
 
 
+def draw_stair_detections(frame, stair_detections: list[dict]) -> None:
+    """Draw stair detection bounding boxes in orange with uncertainty label."""
+    for det in stair_detections:
+        bbox = det.get("bbox")
+        if not bbox:
+            continue
+        x1, y1, x2, y2 = bbox
+        conf = det.get("confidence", 0.0)
+        source = det.get("source", "")
+        direction = det.get("direction", "")
+        uncertain = det.get("uncertain", True)
+        prefix = "POSSIBLE " if uncertain else ""
+        label_text = f"{prefix}STAIRS ({conf:.2f}) {direction} [{source}]"
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 140, 255), 2)
+        cv2.putText(
+            frame,
+            label_text,
+            (x1, max(y1 - 10, 20)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0, 140, 255),
+            2,
+            cv2.LINE_AA,
+        )
+
+
 def run() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     config = CameraConfig(index=CAMERA_INDEX, width=FRAME_WIDTH, height=FRAME_HEIGHT)
@@ -169,7 +210,7 @@ def run() -> int:
     if ocr_worker:
         ocr_worker.start()
 
-    # Phase 11: Door detector (geometric fallback if no custom model is available)
+    # Phase 11: Door detector
     door_detector = (
         DoorDetector(
             model_path=DOOR_MODEL_PATH or None,
@@ -180,6 +221,31 @@ def run() -> int:
         else None
     )
     cached_door_detections: list[dict] = []
+
+    # Phase 12: Stair detector
+    stair_detector = (
+        StairDetector(
+            model_path=STAIR_MODEL_PATH or None,
+            confidence=STAIR_CONFIDENCE,
+            uncertain_threshold=STAIR_UNCERTAIN_THRESHOLD,
+            device=STAIR_DEVICE,
+        )
+        if STAIR_ENABLED
+        else None
+    )
+    cached_stair_detections: list[dict] = []
+
+    # Phase 13: Vehicle awareness engine
+    vehicle_engine = (
+        VehicleAwarenessEngine(
+            approach_depth_delta=VEHICLE_APPROACH_DEPTH_DELTA,
+            approach_area_ratio=VEHICLE_APPROACH_AREA_RATIO,
+            crossing_px_threshold=VEHICLE_CROSSING_PX_THRESHOLD,
+            fast_speed_threshold=VEHICLE_FAST_SPEED_THRESHOLD,
+        )
+        if VEHICLE_AWARENESS_ENABLED
+        else None
+    )
 
     try:
         with Camera(config) as camera:
@@ -229,7 +295,6 @@ def run() -> int:
                 # Phase 11: Run door detection every DOOR_FRAME_INTERVAL frames
                 if door_detector and DOOR_ENABLED and (frame_count % DOOR_FRAME_INTERVAL == 0):
                     raw_doors = door_detector.detect(frame)
-                    # Attach spatial direction to each door detection
                     for d in raw_doors:
                         cx = d["center"][0]
                         fw = frame.shape[1]
@@ -239,7 +304,6 @@ def run() -> int:
                             d["direction"] = "center"
                         else:
                             d["direction"] = "right"
-                    # Cache as actionable events
                     cached_door_detections = [
                         {
                             "event": "door",
@@ -253,12 +317,47 @@ def run() -> int:
                         for d in raw_doors
                     ]
 
+                # Phase 12: Run stair detection every STAIR_FRAME_INTERVAL frames
+                if stair_detector and STAIR_ENABLED and (frame_count % STAIR_FRAME_INTERVAL == 0):
+                    raw_stairs = stair_detector.detect(frame)
+                    for s in raw_stairs:
+                        cx = s["center"][0]
+                        fw = frame.shape[1]
+                        if cx < fw / 3:
+                            s["direction"] = "left"
+                        elif cx < 2 * fw / 3:
+                            s["direction"] = "center"
+                        else:
+                            s["direction"] = "right"
+                    cached_stair_detections = [
+                        {
+                            "event": "stairs",
+                            "object": "stairs",
+                            "direction": s.get("direction", "center"),
+                            "confidence": s["confidence"],
+                            "bbox": s["bbox"],
+                            "priority": "high" if not s.get("uncertain") else "medium",
+                            "uncertain": s.get("uncertain", True),
+                            "source": s.get("source", "geometric"),
+                        }
+                        for s in raw_stairs
+                    ]
+
+                # Phase 13: Vehicle awareness reasoning
+                vehicle_events = (
+                    vehicle_engine.process_frame(detections)
+                    if vehicle_engine and VEHICLE_AWARENESS_ENABLED
+                    else []
+                )
+
                 temporal_events = temporal_reasoner.process_frame(detections)
                 events = extract_events(
                     detections,
                     temporal_events=temporal_events,
                     text_events=cached_text_events,
                     door_events=cached_door_detections,
+                    stair_events=cached_stair_detections,
+                    vehicle_events=vehicle_events,
                 )
                 prioritized_events = event_manager.filter_and_prioritize(events)
 
@@ -275,6 +374,7 @@ def run() -> int:
                 draw_detections(frame, detections)
                 draw_ocr_detections(frame, cached_text_events)
                 draw_door_detections(frame, cached_door_detections)
+                draw_stair_detections(frame, cached_stair_detections)
                 draw_events(frame, events)
                 draw_fps(frame, fps)
                 cv2.imshow(WINDOW_NAME, frame)

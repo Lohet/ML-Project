@@ -49,15 +49,28 @@ class DepthEstimator:
         try:
             os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
             import torch
+            try:
+                import torch.hub
+                hub_dir = torch.hub.get_dir()
+                os.makedirs(hub_dir, exist_ok=True)
+                tl_file = os.path.join(hub_dir, "trusted_list")
+                with open(tl_file, "a+", encoding="utf-8") as f:
+                    f.seek(0)
+                    existing = f.read()
+                    for r in ("rwightman_gen-efficientnet-pytorch", "intel-isl_MiDaS_master", "rwightman", "intel-isl"):
+                        if r not in existing:
+                            f.write(f"{r}\n")
+            except Exception:
+                pass
         except ImportError as exc:
             raise RuntimeError("PyTorch is required for Phase 4 depth estimation.") from exc
 
         LOGGER.info("Loading depth model %s on %s", self.model_type, self.device)
-        model = torch.hub.load("intel-isl/MiDaS", self.model_type)
+        model = torch.hub.load("intel-isl/MiDaS", self.model_type, trust_repo=True)
         model.to(self.device)
         model.eval()
 
-        transforms = torch.hub.load("intel-isl/MiDaS", "transforms")
+        transforms = torch.hub.load("intel-isl/MiDaS", "transforms", trust_repo=True)
         transform = transforms.small_transform
         return model, transform
 

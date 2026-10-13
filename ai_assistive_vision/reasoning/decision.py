@@ -13,9 +13,10 @@ def extract_events(
     text_events: Optional[List[Dict[str, Any]]] = None,
     door_events: Optional[List[Dict[str, Any]]] = None,
     stair_events: Optional[List[Dict[str, Any]]] = None,
+    vehicle_events: Optional[List[Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
-    """Convert detections, temporal events, OCR text events, door events, and
-    stair events into actionable system events.
+    """Convert detections, temporal events, OCR text events, door events,
+    stair events, and vehicle events into actionable system events.
     """
     events: List[Dict[str, Any]] = []
 
@@ -50,6 +51,10 @@ def extract_events(
     # 5. Append stair detection events (Phase 12)
     if stair_events:
         events.extend(stair_events)
+
+    # 6. Append vehicle awareness events (Phase 13)
+    if vehicle_events:
+        events.extend(vehicle_events)
 
     return events
 

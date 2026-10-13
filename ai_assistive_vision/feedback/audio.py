@@ -79,6 +79,22 @@ class AudioEngine:
             return f"{label} moving {direction_phrase}."
         if event_name == "door":
             return f"Door {direction_phrase}."
+        if event_name == "stairs":
+            if event.get("uncertain"):
+                return f"Possible stairs {direction_phrase}."
+            return f"Stairs {direction_phrase}."
+        if event_name == "vehicle_approaching":
+            from_direction = "ahead" if direction == "center" else f"from the {direction}"
+            v_label = "Vehicle"
+            if event.get("is_fast"):
+                return f"Fast vehicle approaching {from_direction}."
+            return f"Vehicle approaching {from_direction}."
+        if event_name == "vehicle_crossing":
+            crossing_dir = event.get("crossing_direction", "left_to_right")
+            cross_phrase = "from left to right" if crossing_dir == "left_to_right" else "from right to left"
+            return f"Vehicle crossing {cross_phrase}."
+        if event_name == "vehicle_close":
+            return f"Vehicle close {direction_phrase}."
 
         return f"{label} {direction_phrase}."
 
